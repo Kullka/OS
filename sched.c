@@ -50,9 +50,29 @@ struct pcb_t * get_mlq_proc(void) {
 	 * Remember to use lock to protect the queue.
 	 * */
 	pthread_mutex_lock(&queue_lock);
+	uint32_t prio_max;
+	if(run_queue.size > 0) {
+		prio_max = run_queue.proc[0]->prio;
+		for (int i = 0; i < run_queue.size; i++) {
+			if(prio_max < run_queue.proc[i]->prio) prio_max = run_queue.proc[i]->prio;
+		}
+	}
 	for(int i = MAX_PRIO; i >= 0; i--){
 		if(mlq_ready_queue[i].size > 0){
-			proc =  dequeue(&mlq_ready_queue[i]);
+			proc = dequeue(&mlq_ready_queue[i]);
+			break;
+		}
+		else {
+			if(run_queue.size > 0) {
+				if(prio_max == i) {
+					while(run_queue.size > 0) {
+						struct pcb_t * temp = dequeue(&run_queue);
+						enqueue(&mlq_ready_queue[temp->prio], temp);
+					}
+					proc = dequeue(&mlq_ready_queue[i]);
+					break;
+				}
+			}
 		}
 	}
 	pthread_mutex_unlock(&queue_lock);
@@ -61,7 +81,8 @@ struct pcb_t * get_mlq_proc(void) {
 
 void put_mlq_proc(struct pcb_t * proc) {
 	pthread_mutex_lock(&queue_lock);
-	enqueue(&mlq_ready_queue[proc->prio], proc);
+	enqueue(&run_queue,proc);
+	// enqueue(&mlq_ready_queue[proc->prio], proc);
 	pthread_mutex_unlock(&queue_lock);
 }
 
